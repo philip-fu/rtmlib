@@ -1,50 +1,9 @@
-'''
-Example:
-
-import cv2
-
-from rtmlib import Wholebody, draw_skeleton
-
-device = 'cuda'
-backend = 'onnxruntime'  # opencv, onnxruntime
-
-cap = cv2.VideoCapture('./demo.mp4')
-
-openpose_skeleton = True  # True for openpose-style, False for mmpose-style
-
-wholebody = Wholebody(to_openpose=openpose_skeleton,
-                      backend=backend,
-                      device=device)
-
-frame_idx = 0
-
-while cap.isOpened():
-    success, frame = cap.read()
-    frame_idx += 1
-
-    if not success:
-        break
-
-    keypoints, scores = wholebody(frame)
-
-    img_show = frame.copy()
-
-    img_show = draw_skeleton(img_show,
-                             keypoints,
-                             scores,
-                             openpose_skeleton=openpose_skeleton,
-                             kpt_thr=0.43)
-
-    img_show = cv2.resize(img_show, (960, 540))
-    cv2.imshow('img', img_show)
-    cv2.waitKey(10)
-
-'''
+import time
 from typing import List, Optional
-
+import cv2
 import numpy as np
 
-from .. import YOLOX, RTMPose
+from .. import YOLOX, RTMPose, RTMDet, RTMDetRegional
 from .utils.types import BodyResult, Keypoint, PoseResult
 
 
@@ -74,7 +33,17 @@ class Wholebody:
             'pose':
             'https://download.openmmlab.com/mmpose/v1/projects/rtmw/onnx_sdk/rtmw-x_simcc-cocktail13_pt-ucoco_270e-256x192-fbef0d61_20230925.zip',  # noqa
             'pose_input_size': (192, 256),
-        }
+        },
+        'lightweight_rtm': {
+            'det':
+            '/home/y0f01wf/lazy_susan/lazy_susan_inference/rtmpose-ort/rtmdet-nano/end2end.onnx',  # noqa
+            'det_input_size': (320, 320),
+            'pose': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-t_simcc-ucoco_dw-ucoco_270e-256x192-dcf277bf_20230728.zip',
+            # "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.zip",
+            # 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-s_simcc-ucoco_dw-ucoco_270e-256x192-3fd922c8_20230728.zip',
+            # 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-t_simcc-ucoco_dw-ucoco_270e-256x192-dcf277bf_20230728.zip',  # noqa
+            'pose_input_size': (192, 256),
+        },
     }
 
     def __init__(self,
@@ -86,6 +55,8 @@ class Wholebody:
                  to_openpose: bool = False,
                  backend: str = 'onnxruntime',
                  device: str = 'cpu'):
+        
+        self.mode = mode
 
         if det is None:
             det = self.MODE[mode]['det']
@@ -95,22 +66,56 @@ class Wholebody:
             pose = self.MODE[mode]['pose']
             pose_input_size = self.MODE[mode]['pose_input_size']
 
-        self.det_model = YOLOX(det,
-                               model_input_size=det_input_size,
-                               backend=backend,
-                               device=device)
+        if 'rtm' in mode:
+            self.do_flip = True
+            self.det_model = RTMDet(det,
+                                model_input_size=det_input_size,
+                                backend=backend,
+                                device=device)
+        else:
+            self.do_flip = False
+            self.det_model = YOLOX(det,
+                                model_input_size=det_input_size,
+                                backend=backend,
+                                device=device)
+        
         self.pose_model = RTMPose(pose,
-                                  model_input_size=pose_input_size,
-                                  to_openpose=to_openpose,
-                                  backend=backend,
-                                  device=device)
+                                model_input_size=pose_input_size,
+                                to_openpose=to_openpose,
+                                backend=backend,
+                                device=device)
 
     def __call__(self, image: np.ndarray):
-        bboxes = self.det_model(image)
-        keypoints, scores = self.pose_model(image, bboxes=bboxes)
+        """One inference for upper image (with some buffer). One for lower.
+        WARNING: there is no dedup here.
+        """
+        if not self.do_flip:
+            bboxes = self.det_model(image)
+            keypoints, scores = self.pose_model(image, bboxes=bboxes)
+        else:
+            img_h, img_w, _ =  image.shape
+            upper_image = np.copy(image)
+            upper_image[int(img_h / 2 * 1.2):, :] = 255.
+            lower_image = cv2.flip(image, 0)
+            lower_image[int(img_h / 2 * 1.2):, :] = 255.
 
-        return keypoints, scores
+            start_time = time.time()
+            upper_bboxes = self.det_model(upper_image)
+            lower_bboxes = self.det_model(lower_image)
+            print(f"det_time:{time.time() - start_time}s")
+            start_time = time.time()
+            keypoints, scores = self.pose_model(upper_image, bboxes=upper_bboxes)
+            lower_keypoints, lower_scores = self.pose_model(lower_image, bboxes=lower_bboxes)
+            print(f"pose_time:{time.time() - start_time}s for {len(upper_bboxes) + len(lower_bboxes)} boxes")
 
+            lower_keypoints[:, :, 1] = img_h - lower_keypoints[:, :, 1]
+            lower_bboxes[:, [1, 3]] = img_h - lower_bboxes[:, [3, 1]]
+            keypoints = np.vstack((keypoints, lower_keypoints))
+            bboxes = np.vstack((upper_bboxes, lower_bboxes))
+            scores = np.vstack((scores, lower_scores))
+        
+        return keypoints, scores, bboxes
+    
     @staticmethod
     def format_result(keypoints_info: np.ndarray) -> List[PoseResult]:
 

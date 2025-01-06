@@ -1,4 +1,4 @@
-from .rtmdet import RTMDet
+from .rtmdet import RTMDet, RTMDetRegional
 from .yolox import YOLOX
 
-__all__ = ['RTMDet', 'YOLOX']
+__all__ = ['RTMDet', 'YOLOX', 'RTMDetRegional']

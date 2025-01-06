@@ -26,11 +26,20 @@ class RTMPose(BaseTool):
             bboxes = [[0, 0, image.shape[1], image.shape[0]]]
 
         keypoints, scores = [], []
+        imgs, centers, scales = [], [], []
         for bbox in bboxes:
             img, center, scale = self.preprocess(image, bbox)
-            outputs = self.inference(img)
-            kpts, score = self.postprocess(outputs, center, scale)
+            imgs.append(img)
+            centers.append(center)
+            scales.append(scale)
+            
+        imgs = np.stack(imgs)
+        outputs_batch = self.inference(imgs)
 
+        simcc_x_list, simcc_y_list = outputs_batch
+        for idx in range(len(bboxes)):
+            outputs = [simcc_x_list[idx][np.newaxis, :], simcc_y_list[idx][np.newaxis, :]]
+            kpts, score = self.postprocess(outputs, centers[idx], scales[idx])
             keypoints.append(kpts)
             scores.append(score)
 

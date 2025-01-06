@@ -99,7 +99,7 @@ class BaseTool(metaclass=ABCMeta):
         """Implement the actual function here."""
         raise NotImplementedError
 
-    def inference(self, img: np.ndarray):
+    def inference(self, img: np.ndarray, dtype=np.float32):
         """Inference model.
 
         Args:
@@ -108,10 +108,16 @@ class BaseTool(metaclass=ABCMeta):
         Returns:
             outputs (np.ndarray): Output of RTMPose model.
         """
-        # build input to (1, 3, H, W)
-        img = img.transpose(2, 0, 1)
-        img = np.ascontiguousarray(img, dtype=np.float32)
-        input = img[None, :, :, :]
+        if len(img.shape) == 3:
+            # build input to (1, 3, H, W)
+            img = img.transpose(2, 0, 1)
+            img = np.ascontiguousarray(img, dtype=dtype)
+            input = img[None, :, :, :]
+        else:
+            # build input to (N, 3, H, W)
+            img = img.transpose(0, 3, 1, 2)
+            img = np.ascontiguousarray(img, dtype=dtype)
+            input = img
 
         # run model
         if self.backend == 'opencv':
