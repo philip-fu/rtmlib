@@ -36,7 +36,7 @@ class Wholebody:
         },
         'lightweight_rtm': {
             'det':
-            '/home/y0f01wf/lazy_susan/lazy_susan_inference/rtmpose-ort/rtmdet-nano/end2end.onnx',  # noqa
+            'https://mmdeploy-oss.openmmlab.com/model/mmpose/rtmdet-37adb8.onnx',  # noqa
             'det_input_size': (320, 320),
             'pose': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-t_simcc-ucoco_dw-ucoco_270e-256x192-dcf277bf_20230728.zip',
             # "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.zip",
