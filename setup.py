@@ -101,17 +101,17 @@ def parse_requirements(fname='requirements.txt', with_version=True):
 
 
 if __name__ == '__main__':
-    setup(name='rtmlib',
+    setup(name='rtmlib-flip',
           version=get_version(),
           description='A library for real-time pose estimation.',
-          author='Tau-J',
-          author_email='taujiang@outlook.com',
+          author='Philip.Fu',
+          author_email='fuyang.phil@gmail.com',
           keywords='pose estimation',
           long_description=readme(),
           long_description_content_type='text/markdown',
           packages=find_packages(),
           include_package_data=True,
-          url='https://github.com/Tau-J/rtmlib',
+          url='https://github.com/philip-fu/rtmlib',
           license='Apache License 2.0',
           python_requires='>=3.7',
           install_requires=parse_requirements('requirements/runtime.txt'),

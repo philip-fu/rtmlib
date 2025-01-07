@@ -2,7 +2,7 @@ import time
 from typing import List, Optional
 import cv2
 import numpy as np
-
+import logging
 from .. import YOLOX, RTMPose, RTMDet, RTMDetRegional
 from .utils.types import BodyResult, Keypoint, PoseResult
 
@@ -43,6 +43,10 @@ class Wholebody:
             # 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-s_simcc-ucoco_dw-ucoco_270e-256x192-3fd922c8_20230728.zip',
             # 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-t_simcc-ucoco_dw-ucoco_270e-256x192-dcf277bf_20230728.zip',  # noqa
             'pose_input_size': (192, 256),
+            'pose_heavy': 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.zip',
+            # "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.zip",
+            # 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-s_simcc-ucoco_dw-ucoco_270e-256x192-3fd922c8_20230728.zip',
+            # 'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-t_simcc-ucoco_dw-ucoco_270e-256x192-dcf277bf_20230728.zip',  # noqa
         },
     }
 
@@ -54,6 +58,7 @@ class Wholebody:
                  mode: str = 'balanced',
                  to_openpose: bool = False,
                  backend: str = 'onnxruntime',
+                 score_thres: float = 0.3,
                  device: str = 'cpu'):
         
         self.mode = mode
@@ -64,6 +69,7 @@ class Wholebody:
 
         if pose is None:
             pose = self.MODE[mode]['pose']
+            pose_heavy = self.MODE[mode].get('pose_heavy')
             pose_input_size = self.MODE[mode]['pose_input_size']
 
         if 'rtm' in mode:
@@ -78,20 +84,38 @@ class Wholebody:
                                 model_input_size=det_input_size,
                                 backend=backend,
                                 device=device)
+            
+        self.det_model.score_thr = score_thres
         
         self.pose_model = RTMPose(pose,
                                 model_input_size=pose_input_size,
                                 to_openpose=to_openpose,
                                 backend=backend,
                                 device=device)
+        if pose_heavy is not None:
+            self.num_boxes_to_use_heavy = 8
+            self.pose_model_heavy = RTMPose(pose_heavy,
+                                model_input_size=pose_input_size,
+                                to_openpose=to_openpose,
+                                backend=backend,
+                                device=device)
+        else:
+            self.num_boxes_to_use_heavy = -1
+            self.pose_model_heavy = None
+
 
     def __call__(self, image: np.ndarray):
         """One inference for upper image (with some buffer). One for lower.
         WARNING: there is no dedup here.
+
+        Use a bigger pose model when # boxes are low
         """
         if not self.do_flip:
             bboxes = self.det_model(image)
-            keypoints, scores = self.pose_model(image, bboxes=bboxes)
+            if len(bboxes) <= self.num_boxes_to_use_heavy:
+                keypoints, scores = self.pose_model_heavy(image, bboxes=bboxes)
+            else:
+                keypoints, scores = self.pose_model(image, bboxes=bboxes)
         else:
             img_h, img_w, _ =  image.shape
             upper_image = np.copy(image)
@@ -102,11 +126,20 @@ class Wholebody:
             start_time = time.time()
             upper_bboxes = self.det_model(upper_image)
             lower_bboxes = self.det_model(lower_image)
-            print(f"det_time:{time.time() - start_time}s")
+            logging.info(f"det_time:{time.time() - start_time}s")
             start_time = time.time()
-            keypoints, scores = self.pose_model(upper_image, bboxes=upper_bboxes)
-            lower_keypoints, lower_scores = self.pose_model(lower_image, bboxes=lower_bboxes)
-            print(f"pose_time:{time.time() - start_time}s for {len(upper_bboxes) + len(lower_bboxes)} boxes")
+            
+            if len(upper_bboxes) <= self.num_boxes_to_use_heavy:
+                keypoints, scores = self.pose_model_heavy(upper_image, bboxes=upper_bboxes)
+            else:
+                keypoints, scores = self.pose_model(upper_image, bboxes=upper_bboxes)
+            
+            if len(lower_bboxes) <= self.num_boxes_to_use_heavy:
+                lower_keypoints, lower_scores = self.pose_model_heavy(lower_image, bboxes=lower_bboxes)
+            else:
+                lower_keypoints, lower_scores = self.pose_model(lower_image, bboxes=lower_bboxes)
+            
+            logging.info(f"pose_time:{time.time() - start_time}s for {len(upper_bboxes) + len(lower_bboxes)} boxes")
 
             lower_keypoints[:, :, 1] = img_h - lower_keypoints[:, :, 1]
             lower_bboxes[:, [1, 3]] = img_h - lower_bboxes[:, [3, 1]]
