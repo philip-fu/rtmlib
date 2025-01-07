@@ -129,14 +129,11 @@ class Wholebody:
             logging.info(f"det_time:{time.time() - start_time}s")
             start_time = time.time()
             
-            if len(upper_bboxes) <= self.num_boxes_to_use_heavy:
+            if len(upper_bboxes) + len(lower_bboxes) <= self.num_boxes_to_use_heavy:
                 keypoints, scores = self.pose_model_heavy(upper_image, bboxes=upper_bboxes)
-            else:
-                keypoints, scores = self.pose_model(upper_image, bboxes=upper_bboxes)
-            
-            if len(lower_bboxes) <= self.num_boxes_to_use_heavy:
                 lower_keypoints, lower_scores = self.pose_model_heavy(lower_image, bboxes=lower_bboxes)
             else:
+                keypoints, scores = self.pose_model(upper_image, bboxes=upper_bboxes)
                 lower_keypoints, lower_scores = self.pose_model(lower_image, bboxes=lower_bboxes)
             
             logging.info(f"pose_time:{time.time() - start_time}s for {len(upper_bboxes) + len(lower_bboxes)} boxes")
