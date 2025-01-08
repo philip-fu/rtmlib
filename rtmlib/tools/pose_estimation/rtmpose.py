@@ -14,12 +14,14 @@ class RTMPose(BaseTool):
                  model_input_size: tuple = (288, 384),
                  mean: tuple = (123.675, 116.28, 103.53),
                  std: tuple = (58.395, 57.12, 57.375),
+                 padding: float = 1.25,
                  to_openpose: bool = False,
                  backend: str = 'onnxruntime',
                  device: str = 'cpu'):
         super().__init__(onnx_model, model_input_size, mean, std, backend,
                          device)
         self.to_openpose = to_openpose
+        self.padding = padding
 
     def __call__(self, image: np.ndarray, bboxes: list = []):
         if len(bboxes) == 0:
@@ -28,7 +30,7 @@ class RTMPose(BaseTool):
         keypoints, scores = [], []
         imgs, centers, scales = [], [], []
         for bbox in bboxes:
-            img, center, scale = self.preprocess(image, bbox)
+            img, center, scale = self.preprocess(image, bbox, padding=self.padding)
             imgs.append(img)
             centers.append(center)
             scales.append(scale)
@@ -51,7 +53,7 @@ class RTMPose(BaseTool):
 
         return keypoints, scores
 
-    def preprocess(self, img: np.ndarray, bbox: list):
+    def preprocess(self, img: np.ndarray, bbox: list, padding: float=1.25):
         """Do preprocessing for RTMPose model inference.
 
         Args:
@@ -67,7 +69,7 @@ class RTMPose(BaseTool):
         bbox = np.array(bbox)
 
         # get center and scale
-        center, scale = bbox_xyxy2cs(bbox, padding=1.25)
+        center, scale = bbox_xyxy2cs(bbox, padding=padding)
 
         # do affine transformation
         resized_img, scale = top_down_affine(self.model_input_size, scale,

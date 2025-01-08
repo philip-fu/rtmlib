@@ -28,10 +28,10 @@ class Wholebody:
         },
         'balanced': {
             'det':
-            'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/yolox_m_8xb8-300e_humanart-c2c7a14a.zip',  # noqa
+            'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/yolox_s_8xb8-300e_humanart-3ef259a7.zip',  # noqa
             'det_input_size': (640, 640),
             'pose':
-            'https://download.openmmlab.com/mmpose/v1/projects/rtmw/onnx_sdk/rtmw-x_simcc-cocktail13_pt-ucoco_270e-256x192-fbef0d61_20230925.zip',  # noqa
+            'https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-ucoco_dw-ucoco_270e-256x192-c8b76419_20230728.zip',  # noqa
             'pose_input_size': (192, 256),
         },
         'lightweight_rtm': {
@@ -93,12 +93,13 @@ class Wholebody:
                                 backend=backend,
                                 device=device)
         if pose_heavy is not None:
-            self.num_boxes_to_use_heavy = 8
+            self.num_boxes_to_use_heavy = 10
             self.pose_model_heavy = RTMPose(pose_heavy,
                                 model_input_size=pose_input_size,
                                 to_openpose=to_openpose,
                                 backend=backend,
-                                device=device)
+                                device=device,
+                                padding=2)
         else:
             self.num_boxes_to_use_heavy = -1
             self.pose_model_heavy = None
@@ -111,11 +112,15 @@ class Wholebody:
         Use a bigger pose model when # boxes are low
         """
         if not self.do_flip:
+            start_time = time.time()
             bboxes = self.det_model(image)
+            logging.info(f"det_time:{time.time() - start_time}s")
+            start_time = time.time()
             if len(bboxes) <= self.num_boxes_to_use_heavy:
                 keypoints, scores = self.pose_model_heavy(image, bboxes=bboxes)
             else:
                 keypoints, scores = self.pose_model(image, bboxes=bboxes)
+            logging.info(f"pose_time:{time.time() - start_time}s for {len(bboxes)} boxes")
         else:
             img_h, img_w, _ =  image.shape
             upper_image = np.copy(image)
