@@ -59,6 +59,7 @@ class Wholebody:
                  to_openpose: bool = False,
                  backend: str = 'onnxruntime',
                  score_thres: float = 0.3,
+                 nms_thres: float = 0.3,
                  device: str = 'cpu'):
         
         self.mode = mode
@@ -77,13 +78,17 @@ class Wholebody:
             self.det_model = RTMDet(det,
                                 model_input_size=det_input_size,
                                 backend=backend,
-                                device=device)
+                                device=device,
+                                score_thr=score_thres,
+                                nms_thr=nms_thres)
         else:
             self.do_flip = False
             self.det_model = YOLOX(det,
                                 model_input_size=det_input_size,
                                 backend=backend,
-                                device=device)
+                                device=device,
+                                score_thr=score_thres,
+                                nms_thr=nms_thres)
             
         self.det_model.score_thr = score_thres
         
@@ -117,9 +122,9 @@ class Wholebody:
             logging.info(f"det_time:{time.time() - start_time}s")
             start_time = time.time()
             if len(bboxes) <= self.num_boxes_to_use_heavy:
-                keypoints, scores = self.pose_model_heavy(image, bboxes=bboxes)
+                keypoints, scores = self.pose_model_heavy(image, bboxes=bboxes[:,:4])
             else:
-                keypoints, scores = self.pose_model(image, bboxes=bboxes)
+                keypoints, scores = self.pose_model(image, bboxes=bboxes[:,:4])
             logging.info(f"pose_time:{time.time() - start_time}s for {len(bboxes)} boxes")
         else:
             img_h, img_w, _ =  image.shape
@@ -135,11 +140,11 @@ class Wholebody:
             start_time = time.time()
             
             if len(upper_bboxes) + len(lower_bboxes) <= self.num_boxes_to_use_heavy:
-                keypoints, scores = self.pose_model_heavy(upper_image, bboxes=upper_bboxes)
-                lower_keypoints, lower_scores = self.pose_model_heavy(lower_image, bboxes=lower_bboxes)
+                keypoints, scores = self.pose_model_heavy(upper_image, bboxes=upper_bboxes[:,:4])
+                lower_keypoints, lower_scores = self.pose_model_heavy(lower_image, bboxes=lower_bboxes[:,:4])
             else:
-                keypoints, scores = self.pose_model(upper_image, bboxes=upper_bboxes)
-                lower_keypoints, lower_scores = self.pose_model(lower_image, bboxes=lower_bboxes)
+                keypoints, scores = self.pose_model(upper_image, bboxes=upper_bboxes[:,:4])
+                lower_keypoints, lower_scores = self.pose_model(lower_image, bboxes=lower_bboxes[:,:4])
             
             logging.info(f"pose_time:{time.time() - start_time}s for {len(upper_bboxes) + len(lower_bboxes)} boxes")
 

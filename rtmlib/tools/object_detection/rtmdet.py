@@ -15,18 +15,22 @@ class RTMDet(BaseTool):
                  mean: tuple = (103.5300, 116.2800, 123.6750),
                  std: tuple = (57.3750, 57.1200, 58.3950),
                  backend: str = 'onnxruntime',
-                 device: str = 'cpu'):
+                 device: str = 'cpu',
+                 score_thr: float = 0.3,
+                 nms_thr: float = 0.3,
+                 ):
         super().__init__(onnx_model,
                          model_input_size,
                          mean,
                          std,
                          backend=backend,
                          device=device)
+        self.score_thr = score_thr
+        self.nms_thr = nms_thr
 
     def __call__(self, image: np.ndarray):
         image, ratio = self.preprocess(image)
         outputs = self.inference(image, dtype=np.float32)[0]
-        # print(len(outputs))
         results = self.postprocess(outputs, ratio)
         return results
 
@@ -136,9 +140,16 @@ class RTMDet(BaseTool):
             final_boxes, final_scores = pack_dets
             final_boxes /= ratio
 
-            final_boxes = final_boxes[final_scores >= self.score_thr]
+            # final_boxes = final_boxes[final_scores >= self.score_thr]
 
-            # no nms
+            indices = cv2.dnn.NMSBoxes(
+                bboxes=final_boxes[:, :4],
+                scores=final_scores,
+                score_threshold=self.score_thr,
+                nms_threshold=self.nms_thr,
+            )
+
+            final_boxes = np.hstack((final_boxes[indices], final_scores[indices].reshape((-1,1))))
 
         return final_boxes
 
