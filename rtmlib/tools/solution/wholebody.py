@@ -7,22 +7,22 @@ from .. import YOLOX, RTMPose, RTMDet, RTMDetRegional
 from .utils.types import BodyResult, Keypoint, PoseResult
 
 def bb_intersection_over_boxB(boxA, boxB):
-	# determine the (x, y)-coordinates of the intersection rectangle
-	xA = max(boxA[0], boxB[0])
-	yA = max(boxA[1], boxB[1])
-	xB = min(boxA[2], boxB[2])
-	yB = min(boxA[3], boxB[3])
-	# compute the area of intersection rectangle
-	interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
-	# compute the area of both the prediction and ground-truth
-	# rectangles
-	boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
-	# compute the intersection over union by taking the intersection
-	# area and dividing it by the sum of prediction + ground-truth
-	# areas - the intersection area
-	iou = interArea / boxBArea
-	# return the intersection over union value
-	return iou
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    # compute the area of intersection rectangle
+    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+    # compute the area of both the prediction and ground-truth
+    # rectangles
+    boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the intersection area
+    iou = interArea / boxBArea
+    # return the intersection over union value
+    return iou
 
 class Wholebody:
 
@@ -126,8 +126,20 @@ class Wholebody:
             self.num_boxes_to_use_heavy = -1
             self.pose_model_heavy = None
 
+    def filter_bbox(
+        self,
+        bboxes: np.ndarray,
+        no_man_area: List[int]
+    ) -> np.ndarray:
+        selected_idxs = []
+        for idx, bbox in enumerate(bboxes):
+            bbox_overlap_with_no_man_area = bb_intersection_over_boxB(no_man_area, bbox)
+            if bbox_overlap_with_no_man_area <= 0.7:
+                selected_idxs.append(idx)
 
-    def __call__(self, image: np.ndarray, no_man_area: Optional[List[int]]):
+        return bboxes[selected_idxs]
+
+    def __call__(self, image: np.ndarray, no_man_area: Optional[List[int]]=None):
         """One inference for upper image (with some buffer). One for lower.
         WARNING: there is no dedup here.
 
@@ -136,14 +148,9 @@ class Wholebody:
         if not self.do_flip:
             start_time = time.time()
             bboxes = self.det_model(image)
-
             if no_man_area is not None:
-                selected_idxs = []
-                for idx, bbox in enumerate(bboxes):
-                    if bb_intersection_over_boxB(no_man_area, bbox) <= 0.7:
-                        selected_idxs.append(idx)
-
-                bboxes = bboxes[selected_idxs]
+                bboxes = self.filter_bbox(bboxes=bboxes, no_man_area=no_man_area)
+            
             logging.info(f"det_time:{time.time() - start_time}s")
             start_time = time.time()
             if len(bboxes) <= self.num_boxes_to_use_heavy:
@@ -163,6 +170,12 @@ class Wholebody:
             lower_bboxes = self.det_model(lower_image)
             logging.info(f"det_time:{time.time() - start_time}s")
             start_time = time.time()
+
+            if no_man_area is not None:
+                upper_bboxes = self.filter_bbox(bboxes=upper_bboxes, no_man_area=no_man_area)
+                no_man_area_flip = np.copy(no_man_area)
+                no_man_area_flip[[1,3]] = img_h - no_man_area_flip[[3,1]]
+                lower_bboxes = self.filter_bbox(bboxes=lower_bboxes, no_man_area=no_man_area_flip)
             
             if len(upper_bboxes) + len(lower_bboxes) <= self.num_boxes_to_use_heavy:
                 keypoints, scores = self.pose_model_heavy(upper_image, bboxes=upper_bboxes[:,:4])

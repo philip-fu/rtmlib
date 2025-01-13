@@ -25,7 +25,7 @@ class RTMPose(BaseTool):
 
     def __call__(self, image: np.ndarray, bboxes: list = []):
         if len(bboxes) == 0:
-            bboxes = [[0, 0, image.shape[1], image.shape[0]]]
+            return np.empty((0, 133, 2)), np.empty((0,1))
 
         keypoints, scores = [], []
         imgs, centers, scales = [], [], []
