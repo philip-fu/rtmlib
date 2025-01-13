@@ -188,10 +188,18 @@ class Wholebody:
 
             lower_keypoints[:, :, 1] = img_h - lower_keypoints[:, :, 1]
             lower_bboxes[:, [1, 3]] = img_h - lower_bboxes[:, [3, 1]]
-            keypoints = np.vstack((keypoints, lower_keypoints))
+
+            if len(keypoints) == 0:
+                keypoints = lower_keypoints
+                scores = lower_scores
+            elif len(lower_keypoints) == 0:
+                pass
+            else:
+                keypoints = np.vstack((keypoints, lower_keypoints))
+                scores = np.vstack((scores, lower_scores))
+
             bboxes = np.vstack((upper_bboxes, lower_bboxes))
-            scores = np.vstack((scores, lower_scores))
-        
+            
         return keypoints, scores, bboxes
     
     @staticmethod
