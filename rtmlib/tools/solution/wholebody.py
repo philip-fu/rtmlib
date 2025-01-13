@@ -6,6 +6,23 @@ import logging
 from .. import YOLOX, RTMPose, RTMDet, RTMDetRegional
 from .utils.types import BodyResult, Keypoint, PoseResult
 
+def bb_intersection_over_boxB(boxA, boxB):
+	# determine the (x, y)-coordinates of the intersection rectangle
+	xA = max(boxA[0], boxB[0])
+	yA = max(boxA[1], boxB[1])
+	xB = min(boxA[2], boxB[2])
+	yB = min(boxA[3], boxB[3])
+	# compute the area of intersection rectangle
+	interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+	# compute the area of both the prediction and ground-truth
+	# rectangles
+	boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+	# compute the intersection over union by taking the intersection
+	# area and dividing it by the sum of prediction + ground-truth
+	# areas - the intersection area
+	iou = interArea / boxBArea
+	# return the intersection over union value
+	return iou
 
 class Wholebody:
 
@@ -110,7 +127,7 @@ class Wholebody:
             self.pose_model_heavy = None
 
 
-    def __call__(self, image: np.ndarray):
+    def __call__(self, image: np.ndarray, no_man_area: Optional[List[int]]):
         """One inference for upper image (with some buffer). One for lower.
         WARNING: there is no dedup here.
 
@@ -119,6 +136,14 @@ class Wholebody:
         if not self.do_flip:
             start_time = time.time()
             bboxes = self.det_model(image)
+
+            if no_man_area is not None:
+                selected_idxs = []
+                for idx, bbox in enumerate(bboxes):
+                    if bb_intersection_over_boxB(no_man_area, bbox) <= 0.7:
+                        selected_idxs.append(idx)
+
+                bboxes = bboxes[selected_idxs]
             logging.info(f"det_time:{time.time() - start_time}s")
             start_time = time.time()
             if len(bboxes) <= self.num_boxes_to_use_heavy:
