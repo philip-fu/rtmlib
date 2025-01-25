@@ -86,6 +86,11 @@ class Body:
             'pose':
             'https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-m_16xb16-600e_body7-640x640-39e78cc4_20231211.zip',  # noqa
             'pose_input_size': (640, 640),
+        },
+        'superfast': {
+            'pose':
+            'https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-t_8xb32-600e_body7-416x416-f48f75cb_20231219.zip',  # noqa
+            'pose_input_size': (416, 416),
         }
     }
 
@@ -94,6 +99,7 @@ class Body:
                  det_input_size: tuple = (640, 640),
                  pose: str = None,
                  pose_input_size: tuple = (288, 384),
+                 score_threshold: float = 0.3,
                  mode: str = 'balanced',
                  to_openpose: bool = False,
                  backend: str = 'onnxruntime',
@@ -108,6 +114,7 @@ class Body:
             pose_input_size = self.RTMO_MODE[mode]['pose_input_size']
             self.pose_model = RTMO(pose,
                                    model_input_size=pose_input_size,
+                                   score_threshold=score_threshold,
                                    to_openpose=to_openpose,
                                    backend=backend,
                                    device=device)

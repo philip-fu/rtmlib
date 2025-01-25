@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 from ..base import BaseTool
-from .post_processings import multiclass_nms
+from .post_processings import nms, multiclass_nms
 from ..pose_estimation.pre_processings import bbox_xyxy2cs, top_down_affine
 
 class RTMDet(BaseTool):
@@ -140,13 +140,13 @@ class RTMDet(BaseTool):
             final_boxes, final_scores = pack_dets
             final_boxes /= ratio
 
-            # final_boxes = final_boxes[final_scores >= self.score_thr]
-
-            indices = cv2.dnn.NMSBoxes(
-                bboxes=final_boxes[:, :4],
+            indices = final_scores >= self.score_thr
+            final_boxes = final_boxes[indices]
+            final_scores = final_scores[indices]
+            indices = nms(
+                boxes=final_boxes[:, :4],
                 scores=final_scores,
-                score_threshold=self.score_thr,
-                nms_threshold=self.nms_thr,
+                nms_thr=self.nms_thr,
             )
 
             final_boxes = np.hstack((final_boxes[indices], final_scores[indices].reshape((-1,1))))
