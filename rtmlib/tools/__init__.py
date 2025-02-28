@@ -33,12 +33,12 @@ def find_susan(
     # ensure at least some circles were found
 
     # print(circles)
-    circles = circles[:, :2, :]
     if circles is not None:
+        circles = circles[:, :2, :]
         distances_to_center = np.sum(np.abs(circles[0, :, :2] - np.array([image_size[1]/2, image_size[0]/2])) ** 2, axis=-1) ** (1/2.)
 
         selected_circle_idx_1, selected_circle_idx_2 = None, None
-        min_dist_1, min_dist_2 = np.Infinity, np.Infinity
+        min_dist_1, min_dist_2 = np.inf, np.inf
         for idx, distance_to_center in enumerate(distances_to_center):
             if distance_to_center < min_dist_1:
                 if min_dist_1 < min_dist_2:

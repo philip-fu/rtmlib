@@ -6,6 +6,23 @@ import numpy as np
 from ..base import BaseTool
 from .post_processings import convert_coco_to_openpose
 
+def bb_intersection_over_boxB(boxA, boxB):
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    # compute the area of intersection rectangle
+    interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+    # compute the area of both the prediction and ground-truth
+    # rectangles
+    boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the intersection area
+    iou = interArea / boxBArea
+    # return the intersection over union value
+    return iou
 
 class RTMO(BaseTool):
 
@@ -108,7 +125,8 @@ class RTMO(BaseTool):
     
     @staticmethod
     def transform_keypoints_to_roi(
-        keypoints: np.ndarray
+        keypoints: np.ndarray,
+        no_man_area: List[float] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Infer roi from openpose 18 keypoints.
         Return a tuple of (head boxes, hand boxes)
@@ -123,6 +141,16 @@ class RTMO(BaseTool):
             keypoints[:, head_keypoint_indexes, 0].max(axis=1),
             keypoints[:, head_keypoint_indexes, 1].max(axis=1),
         )).transpose((1, 0))
+
+        if no_man_area is not None:
+            selected_idxs = []
+            for idx, bbox in enumerate(head_bboxes):
+                bbox_overlap_with_no_man_area = bb_intersection_over_boxB(no_man_area, bbox)
+                if bbox_overlap_with_no_man_area <= 0.7:
+                    selected_idxs.append(idx)
+
+            head_bboxes = head_bboxes[selected_idxs]
+            keypoints = keypoints[selected_idxs, :, :]
 
         # approximate hand size with 0.5 * forearm
         hand_sizes = (np.hstack((
