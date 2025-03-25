@@ -134,9 +134,15 @@ def find_polygon(
         bottom_point_of_circle = points[
             np.argmax(points[:, 0, 1]), 0, :
         ]
+        top_point_of_circle = points[
+            np.argmin(points[:, 0, 1]), 0, :
+        ]
         correction_scale = (1 - roundness_of_polygon) * (max_correction_scale - 1) + 1
-        print(f"Scaling circle by {correction_scale} originating from bottom.")
+        print(f"Scaling circle by {correction_scale}.")
+        # expand top
         polygon = scale(polygon, xfact=1, yfact=correction_scale, origin=tuple(bottom_point_of_circle.tolist()))
+        # shrink btm
+        polygon = scale(polygon, xfact=1, yfact=1. / correction_scale, origin=tuple(top_point_of_circle.tolist()))
 
         print(f"Shifting circle by ({manual_shift_correction_in_x}, {manual_shift_correction_in_y}).")
         moved_polygon = translate(polygon, xoff=manual_shift_correction_in_x, yoff=-manual_shift_correction_in_y)
