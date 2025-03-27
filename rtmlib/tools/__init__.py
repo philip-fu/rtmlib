@@ -9,8 +9,11 @@ __all__ = [
 
 import cv2
 import numpy as np
-from typing import Tuple, Optional
-
+from typing import List, Tuple, Optional
+from shapely.geometry import Polygon
+from shapely import minimum_bounding_circle
+from shapely.affinity import translate, scale
+import logging
 
 def find_susan(
     image: np.ndarray,
@@ -77,12 +80,7 @@ def find_susan(
 
 
 #%%
-import cv2
-import numpy as np
-from typing import List
-from shapely.geometry import Polygon
-from shapely import minimum_bounding_circle
-from shapely.affinity import translate, scale
+
 
 
 
@@ -113,7 +111,7 @@ def find_polygon(
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, lower_green, upper_green)
     num_labels, labels_im = cv2.connectedComponents(mask)
-    susan_mask = labels_im == labels_im[label_point[0], label_point[1]]
+    susan_mask = labels_im == labels_im[label_point[1], label_point[0]]
 
     # plt.imshow(labels_im)
 
@@ -150,3 +148,68 @@ def find_polygon(
         return moved_polygon
     else:
         return None
+
+
+    
+def calculate_angle(a, b, c):
+    a = np.array(a)
+    b = np.array(b)
+    c = np.array(c)
+
+    ba = a - b
+    bc = c - b
+
+    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+    angle = np.arccos(cosine_angle)
+    return np.degrees(angle)
+
+def is_standing(
+    keypoints, 
+    standing_threshold_min: float = 150,
+    standing_threshold_max: float = 180,
+    check_leg_only: bool = True, # check hip-knee-ankle. otherwise check neck-hip-knee
+) -> bool:
+    """
+    Checks if a person is standing based on OpenPose keypoints.
+    True if either of the legs (hip-knee-ankle) is straight.
+
+    Args:
+        keypoints (list): List of keypoint coordinates (x, y) for a person.
+                              Assumes keypoints are ordered as: 
+                              [nose, neck, r_shoulder, r_elbow, r_wrist, l_shoulder, l_elbow, l_wrist, 
+                               hip_r, hip_l, r_knee, l_knee, r_ankle, l_ankle, ...]
+    Returns:
+        bool: True if the person is standing, False otherwise.
+    """
+    if len(keypoints) < 14:
+        return False
+    
+    if any([x is None for x in keypoints[8:14]]):
+        return False
+
+    if check_leg_only:
+        left_leg_angle = calculate_angle(keypoints[8], keypoints[9], keypoints[10])
+        right_leg_angle = calculate_angle(keypoints[11], keypoints[12], keypoints[13])
+    else:
+        left_leg_angle = calculate_angle(keypoints[1], keypoints[8], keypoints[9])
+        right_leg_angle = calculate_angle(keypoints[1], keypoints[11], keypoints[12])
+
+    is_standing = (standing_threshold_min <= left_leg_angle <= standing_threshold_max) or (standing_threshold_min <= right_leg_angle <= standing_threshold_max)
+
+    logging.info(f"Angles of legs:\t{left_leg_angle}, {right_leg_angle}")
+
+    return is_standing
+
+
+def correct_far_end_standing_hands(
+    bbox,
+    circle_roundness: float = 0.65, # 1 means no correction needed. It's a proxy of the angle
+    max_correction: float = 1., # move the box down by 1 box height
+):
+    """Aim to find its projection onto the table
+    """
+    projection_bbox = np.copy(bbox)
+    bbox_height = bbox[3] - bbox[1]
+    projection_bbox[[1,3]] += bbox_height * max_correction * (1 - circle_roundness)
+
+    return projection_bbox

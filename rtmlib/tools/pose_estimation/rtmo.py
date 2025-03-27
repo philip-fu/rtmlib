@@ -142,11 +142,18 @@ class RTMO(BaseTool):
             keypoints[:, head_keypoint_indexes, 1].max(axis=1),
         )).transpose((1, 0))
 
+        person_bboxes = np.vstack((
+            keypoints[:, :, 0].min(axis=1),
+            keypoints[:, :, 1].min(axis=1),
+            keypoints[:, :, 0].max(axis=1),
+            keypoints[:, :, 1].max(axis=1),
+        )).transpose((1, 0))
+
         if no_man_area is not None:
             selected_idxs = []
-            for idx, bbox in enumerate(head_bboxes):
+            for idx, bbox in enumerate(person_bboxes):
                 bbox_overlap_with_no_man_area = bb_intersection_over_boxB(no_man_area, bbox)
-                if bbox_overlap_with_no_man_area <= 0.7:
+                if bbox_overlap_with_no_man_area <= 0.8:
                     selected_idxs.append(idx)
 
             head_bboxes = head_bboxes[selected_idxs]
