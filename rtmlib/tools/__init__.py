@@ -96,12 +96,14 @@ def get_roundness(contour):
 
 def find_polygon(
     image: np.ndarray, # BGR
-    label_point: List[int],
+    label_point: List[int], # (y, x)
     lower_green: List[int] = [36, 50, 50],
     upper_green: List[int] = [86, 255, 255],
     max_correction_scale: float = 1.2, # relative scale,
     manual_shift_correction_in_x: int = 0,# in num of pixels,
-    manual_shift_correction_in_y: int = 0, 
+    manual_shift_correction_in_y: int = 0,
+    min_size: int = 50, # num pixels
+    buffer_ratio: float = 0.2, # relative to image height
 ):
     if isinstance(lower_green, list):
         lower_green = np.array(lower_green)
@@ -111,7 +113,20 @@ def find_polygon(
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, lower_green, upper_green)
     num_labels, labels_im = cv2.connectedComponents(mask)
-    susan_mask = labels_im == labels_im[label_point[1], label_point[0]]
+
+    # filter out small area
+    for i in range(1, num_labels + 1):
+        pts =  np.where(labels_im == i)
+        if len(pts[0]) < min_size:
+            labels_im[pts] = 0
+
+    # find nearest
+    nonzero = np.argwhere(labels_im != 0)
+    distances = np.sqrt((nonzero[:,0] - label_point[0]) ** 2 + (nonzero[:,1] - label_point[1]) ** 2)
+    nearest_index = np.argmin(distances)
+    updated_label_point = nonzero[nearest_index]
+
+    susan_mask = labels_im == labels_im[updated_label_point[0], updated_label_point[1]]
 
     # plt.imshow(labels_im)
 
@@ -121,6 +136,12 @@ def find_polygon(
         # Assuming only one object in the mask, take the largest contour
         largest_contour = max(contours, key=cv2.contourArea)
         polygon = Polygon(largest_contour[:, 0, :])
+
+        # fill the gap
+        if buffer_ratio > 0:
+            buffer_size = image.shape[0] * 0.2
+            polygon = polygon.buffer(buffer_size)
+            polygon = polygon.buffer(-buffer_size)
 
         # corrections
         roundness_of_polygon = polygon.area / minimum_bounding_circle(polygon).area

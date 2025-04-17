@@ -132,6 +132,7 @@ class RTMO(BaseTool):
         Return a tuple of (head boxes, hand boxes)
         """
         head_keypoint_indexes = [0, 1, 2, 5, 14, 15, 16, 17]
+        upper_body_keypoint_indexes = [0, 1, 2, 3, 4, 5, 6, 7]
         left_forearm_keypoint_indexes = [6, 7]
         right_forearm_keypoint_indexes = [3, 4]
         
@@ -143,14 +144,14 @@ class RTMO(BaseTool):
         )).transpose((1, 0))
 
         person_bboxes = np.vstack((
-            keypoints[:, :, 0].min(axis=1),
-            keypoints[:, :, 1].min(axis=1),
-            keypoints[:, :, 0].max(axis=1),
-            keypoints[:, :, 1].max(axis=1),
+            keypoints[:, upper_body_keypoint_indexes, 0].min(axis=1),
+            keypoints[:, upper_body_keypoint_indexes, 1].min(axis=1),
+            keypoints[:, upper_body_keypoint_indexes, 0].max(axis=1),
+            keypoints[:, upper_body_keypoint_indexes, 1].max(axis=1),
         )).transpose((1, 0))
 
+        selected_idxs = []
         if no_man_area is not None:
-            selected_idxs = []
             for idx, bbox in enumerate(person_bboxes):
                 bbox_overlap_with_no_man_area = bb_intersection_over_boxB(no_man_area, bbox)
                 if bbox_overlap_with_no_man_area <= 0.8:
@@ -234,4 +235,4 @@ class RTMO(BaseTool):
             hand_bboxes_center_ys + hand_bboxes_heights / 2,
         ))
 
-        return head_bboxes, hand_bboxes
+        return head_bboxes, hand_bboxes, selected_idxs
