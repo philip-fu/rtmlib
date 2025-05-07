@@ -126,7 +126,9 @@ class RTMO(BaseTool):
     @staticmethod
     def transform_keypoints_to_roi(
         keypoints: np.ndarray,
+        scores: np.ndarray,
         no_man_area: List[float] = None,
+        no_man_overlap_threshold: float = 0.8,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Infer roi from openpose 18 keypoints.
         Return a tuple of (head boxes, hand boxes)
@@ -152,13 +154,14 @@ class RTMO(BaseTool):
 
         selected_idxs = []
         if no_man_area is not None:
-            for idx, bbox in enumerate(person_bboxes):
+            for idx, bbox in enumerate(head_bboxes):
                 bbox_overlap_with_no_man_area = bb_intersection_over_boxB(no_man_area, bbox)
-                if bbox_overlap_with_no_man_area <= 0.8:
+                if bbox_overlap_with_no_man_area <= no_man_overlap_threshold:
                     selected_idxs.append(idx)
 
             head_bboxes = head_bboxes[selected_idxs]
             keypoints = keypoints[selected_idxs, :, :]
+            scores = scores[selected_idxs, :]
 
         # approximate hand size with 0.5 * forearm
         hand_sizes = (np.hstack((
@@ -190,6 +193,10 @@ class RTMO(BaseTool):
         hand_wrists = np.vstack((
             keypoints[:, left_forearm_keypoint_indexes[1], :],
             keypoints[:, right_forearm_keypoint_indexes[1], :]
+        ))
+        hand_wrist_scores = np.vstack((
+            scores[:, left_forearm_keypoint_indexes[1]],
+            scores[:, right_forearm_keypoint_indexes[1]]
         ))
 
         hand_tips = hand_wrists + \
@@ -233,6 +240,7 @@ class RTMO(BaseTool):
             hand_bboxes_center_ys - hand_bboxes_heights / 2,
             hand_bboxes_center_xs + hand_bboxes_widths / 2,
             hand_bboxes_center_ys + hand_bboxes_heights / 2,
+            hand_wrist_scores.reshape((-1, 1))
         ))
 
         return head_bboxes, hand_bboxes, selected_idxs
