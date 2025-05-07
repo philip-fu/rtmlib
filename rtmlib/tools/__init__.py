@@ -234,3 +234,93 @@ def correct_far_end_standing_hands(
     projection_bbox[[1,3]] += bbox_height * max_correction * (1 - circle_roundness)
 
     return projection_bbox
+
+
+
+def get_crop(
+    image,
+    area
+):
+    return image[
+    area[1]: area[3] + 1,
+    area[0]: area[2] + 1,
+]
+
+def get_alignment_score(
+    crop_1, 
+    crop_2, 
+    min_match_count: int = 10,
+    distance_ratio_threshold: float = 0.75
+):
+    # crop_1 = cv2.cvtColor(crop_1, cv2.COLOR_BGR2GRAY)
+    # crop_2 = cv2.cvtColor(crop_2, cv2.COLOR_BGR2GRAY)
+    orb = cv2.ORB_create(edgeThreshold=5, patchSize=5, fastThreshold=5)
+    kp1, des1 = orb.detectAndCompute(crop_1, None)
+    kp2, des2 = orb.detectAndCompute(crop_2, None)
+
+    bf = cv2.BFMatcher()
+    # matcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
+
+    if des1 is not None and des2 is not None:
+        matches = bf.knnMatch(des1, des2, k=2)
+        # matches = matcher.match(des1, des2, None)
+    else:
+        logging.info("No ORB features found.")
+
+    good_matches = []
+    # for match in matches:
+    #     if match.distance < distance_threshold:
+    #         good_matches.append(match)
+    good_matches = []
+    for m,n in matches:
+        # print(m.distance / (n.distance + 1e-10))
+        if m.distance / (n.distance + 1e-10) < distance_ratio_threshold:
+            good_matches.append(m)
+
+    alignment_score = 0.
+    if len(good_matches) > min_match_count:
+        src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+        dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+        if M is not None:
+            matchesMask = mask.ravel().tolist()
+            num_inliers = sum(matchesMask)
+            alignment_score = num_inliers / len(good_matches)
+            # print(f"Alignment score: {alignment_score}")
+        else:
+            logging.info("Homography matrix could not be estimated.")
+    else:
+        logging.info( "Not enough matches are found - {}/{}".format(len(good_matches), min_match_count) )
+        matchesMask = None
+
+    logging.info(f"Alignment score between two crops: {alignment_score}")
+    return alignment_score
+
+
+def check_new_object(
+    image_1,
+    image_2,
+    area_to_check,
+    threshold: float = 0.5,
+    distance_ratio_threshold: float = 0.75,
+) -> bool:
+    """Check if area has new object. Return the crop in image_2.
+    """
+    crop_1 = get_crop(image_1, area_to_check)
+    crop_2 = get_crop(image_2, area_to_check)
+    alignment_score = get_alignment_score(crop_1, crop_2, distance_ratio_threshold=distance_ratio_threshold)
+    return alignment_score <= threshold, crop_2
+
+def check_if_object_arrive(
+    object_crop,
+    image,
+    area_to_check,
+    threshold: float = 0.5,
+    distance_ratio_threshold: float = 0.8,
+):
+    """Check if the object shows up in area
+    """
+    area_crop = get_crop(image, area_to_check)
+    alignment_score = get_alignment_score(object_crop, area_crop, distance_ratio_threshold=distance_ratio_threshold)
+    return alignment_score >= threshold
+# %%
